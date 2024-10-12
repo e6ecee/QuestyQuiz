@@ -1,0 +1,10 @@
+*.log
+*.dat
+*.ini
+*.blf
+*.regtrans-ms
+AppData/
+Desktop/
+Documents/
+Downloads/
+OneDrive/
