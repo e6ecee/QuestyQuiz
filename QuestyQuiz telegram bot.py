@@ -3,7 +3,6 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 import os
 
-# Load questions from JSON file
 def load_questions():
     with open("C://Users//YERO//Documents//Python projects//Questions.json", 'r', encoding='utf-8') as file:
         return json.load(file)
@@ -72,7 +71,7 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_text("Вы еще не проходили квиз.")
 
 def main() -> None:
-    application = Application.builder().token("YOUR_BOT_TOKEN").build()
+    application = Application.builder().token("6847241186:AAHVKq9G3nDnWIyjg9uMiZPEU4WMnZMXhFA").build()
 
     application.add_handler(CommandHandler('start', start))
     application.add_handler(CallbackQueryHandler(button))
