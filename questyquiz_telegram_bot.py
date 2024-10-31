@@ -116,6 +116,6 @@ async def stats(message: types.Message):
         await message.reply("Вы еще не проходили квиз.")
 
 # Запуск бота
-if name == '__main__':
+if __name__ == '__main__':
     from aiogram import executor
     executor.start_polling(dp, skip_updates=True)
