@@ -114,8 +114,7 @@ results = load_results()
 async def stats(message: types.Message):
     user_id = str(message.from_user.id)
     if user_id in results:
-        await message.
-reply(f"Ваш последний результат: {results[user_id]}/{len(questions)}")
+        await message.reply(f"Ваш последний результат: {results[user_id]}/{len(questions)}")
     else:
         await message.reply("Вы еще не проходили квиз.")
 
