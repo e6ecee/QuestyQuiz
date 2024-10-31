@@ -5,7 +5,7 @@ from aiogram.dispatcher.filters import Command
 import os
 
 def load_questions():
-    with open("C://Users//YERO//Documents//Python projects//Questions.json", 'r', encoding='utf-8') as file:
+    with open("C://Users//YERO//Documents//Python projects//questions.json", 'r', encoding='utf-8') as file:
         return json.load(file)
 
 questions = load_questions()
