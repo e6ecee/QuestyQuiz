@@ -1,8 +1,13 @@
 import json
+import logging
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.dispatcher.filters import Command
 import os
+import threading
+
+# Настройка логирования
+logging.basicConfig(level=logging.INFO)
 
 # Загрузка вопросов из JSON файла
 def load_questions():
@@ -15,6 +20,9 @@ questions = load_questions()
 API_TOKEN = "6847241186:AAHVKq9G3nDnWIyjg9uMiZPEU4WMnZMXhFA"
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher(bot)
+
+# Синхронизация доступа к файлу результатов
+results_lock = threading.Lock()
 
 # Команда /start
 @dp.message_handler(Command("start"))
@@ -75,10 +83,11 @@ def load_results():
             json.dump({}, file, ensure_ascii=False, indent=4)
         return {}
 
-# Сохранение результатов в JSON файл
+# Сохранение результатов в JSON файл с синхронизацией
 def save_results(results):
-    with open("results.json", 'w', encoding='utf-8') as file:
-        json.dump(results, file, ensure_ascii=False, indent=4)
+    with results_lock:
+        with open("results.json", 'w', encoding='utf-8') as file:
+            json.dump(results, file, ensure_ascii=False, indent=4)
 
 results = load_results()
 
