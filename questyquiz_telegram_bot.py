@@ -2,13 +2,13 @@ import json
 import logging
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-from aiogram.dispatcher.filters import Command
-from aiogram.dispatcher import FSMContext
-from aiogram.contrib.middlewares.logging import LoggingMiddleware
-from aiogram.contrib.fsm_storage.memory import MemoryStorage
-from aiogram.dispatcher.filters.state import State, StatesGroup
+from aiogram.filters import Command
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.fsm.state import State, StatesGroup
 import os
 import threading
+import asyncio
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
@@ -24,8 +24,7 @@ questions = load_questions()
 API_TOKEN = "6847241186:AAHVKq9G3nDnWIyjg9uMiZPEU4WMnZMXhFA"
 bot = Bot(token=API_TOKEN)
 storage = MemoryStorage()
-dp = Dispatcher(bot, storage=storage)
-dp.middleware.setup(LoggingMiddleware())
+dp = Dispatcher(storage=storage)
 
 # Синхронизация доступа к файлу результатов
 results_lock = threading.Lock()
@@ -36,9 +35,9 @@ class QuizStates(StatesGroup):
     score = State()
 
 # Команда /start
-@dp.message_handler(Command("start"))
+@dp.message(Command("start"))
 async def start(message: types.Message, state: FSMContext):
-    await state.update_data(current_question=0, score=0)
+    await state.set_data({"current_question": 0, "score": 0})
     await ask_question(message, state)
 
 # Задание вопроса
@@ -49,16 +48,16 @@ async def ask_question(message: types.Message, state: FSMContext):
     question_text = question_data['question']
     options = question_data['options']
 
-    keyboard = [[InlineKeyboardButton(option, callback_data=option)] for option in options]
+    keyboard = [[InlineKeyboardButton(text=option, callback_data=option)] for option in options]
     reply_markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
 
     await message.answer(question_text, reply_markup=reply_markup)
-    await QuizStates.question.set()
+    await state.set_state(QuizStates.question)
 
 # Обработка нажатия на кнопку
-@dp.callback_query_handler(lambda c: True, state=QuizStates.question)
+@dp.callback_query(lambda callback_query: True, QuizStates.question)
 async def button(callback_query: types.CallbackQuery, state: FSMContext):
-    await bot.answer_callback_query(callback_query.id)
+    await callback_query.answer()
 
     selected_option = callback_query.data
     user_data = await state.get_data()
@@ -72,7 +71,11 @@ async def button(callback_query: types.CallbackQuery, state: FSMContext):
     else:
         response_text = f"Неправильно. Правильный ответ: {correct_answer}"
 
-    await bot.edit_message_text(text=response_text, chat_id=callback_query.message.chat.id, message_id=callback_query.message.message_id)
+    await bot.edit_message_text(
+        text=response_text,
+        chat_id=callback_query.message.chat.id,
+        message_id=callback_query.message.message_id
+    )
 
     if current_question_index + 1 < len(questions):
         await state.update_data(current_question=current_question_index + 1)
@@ -83,7 +86,7 @@ async def button(callback_query: types.CallbackQuery, state: FSMContext):
         results[user_id] = user_score
         save_results(results)
         await bot.send_message(callback_query.message.chat.id, f"Квиз завершен! Ваш результат: {user_score}/{len(questions)}")
-        await state.finish()
+        await state.clear()
 
 # Загрузка результатов из JSON файла
 def load_results():
@@ -107,15 +110,19 @@ def save_results(results):
 results = load_results()
 
 # Команда /stats
-@dp.message_handler(Command("stats"))
+@dp.message(Command("stats"))
 async def stats(message: types.Message):
     user_id = str(message.from_user.id)
     if user_id in results:
-        await message.reply(f"Ваш последний результат: {results[user_id]}/{len(questions)}")
+        await message.
+reply(f"Ваш последний результат: {results[user_id]}/{len(questions)}")
     else:
         await message.reply("Вы еще не проходили квиз.")
 
 # Запуск бота
+async def main():
+    dp.include_router(dp.router)
+    await bot.start_polling(dp)
+
 if __name__ == '__main__':
-    from aiogram import executor
-    executor.start_polling(dp, skip_updates=True)
+    asyncio.run(main())
