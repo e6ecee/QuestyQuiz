@@ -21,7 +21,7 @@ def load_questions():
 questions = load_questions()
 
 # Инициализация бота и диспетчера
-API_TOKEN = "YOUR_API_TOKEN"
+API_TOKEN = "6847241186:AAHVKq9G3nDnWIyjg9uMiZPEU4WMnZMXhFA"
 bot = Bot(token=API_TOKEN)
 storage = MemoryStorage()
 dp = Dispatcher(bot, storage=storage)
