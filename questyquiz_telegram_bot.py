@@ -4,26 +4,23 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.dispatcher.filters import Command
 import os
 
-# Загрузка вопросов из JSON файла
 def load_questions():
-    with open("C://Users//YERO//Documents//Python projects//questions.json", 'r', encoding='utf-8') as file:
+    with open("C://Users//YERO//Documents//Python projects//Questions.json", 'r', encoding='utf-8') as file:
         return json.load(file)
 
 questions = load_questions()
 
-# Инициализация бота и диспетчера
 API_TOKEN = "6847241186:AAHVKq9G3nDnWIyjg9uMiZPEU4WMnZMXhFA"
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher(bot)
 
-# Команда /start
+
 @dp.message_handler(Command("start"))
 async def start(message: types.Message):
     message.conf['current_question'] = 0
     message.conf['score'] = 0
     await ask_question(message)
 
-# Задание вопроса
 async def ask_question(message: types.Message):
     question_data = questions[message.conf['current_question']]
     question_text = question_data['question']
@@ -34,7 +31,7 @@ async def ask_question(message: types.Message):
 
     await message.reply(question_text, reply_markup=reply_markup)
 
-# Обработка нажатия на кнопку
+
 @dp.callback_query_handler(lambda c: True)
 async def button(callback_query: types.CallbackQuery):
     await bot.answer_callback_query(callback_query.id)
@@ -60,21 +57,19 @@ async def button(callback_query: types.CallbackQuery):
         save_results(results)
         await bot.send_message(callback_query.message.chat.id, f"Квиз завершен! Ваш результат: {results[user_id]}/{len(questions)}")
 
-# Загрузка результатов из JSON файла
+
 def load_results():
     if os.path.exists("results.json"):
         with open("results.json", 'r', encoding='utf-8') as file:
             return json.load(file)
     return {}
 
-# Сохранение результатов в JSON файл
 def save_results(results):
     with open("results.json", 'w', encoding='utf-8') as file:
         json.dump(results, file, ensure_ascii=False, indent=4)
 
 results = load_results()
 
-# Команда /stats
 @dp.message_handler(Command("stats"))
 async def stats(message: types.Message):
     user_id = str(message.from_user.id)
