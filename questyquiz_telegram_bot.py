@@ -3,6 +3,10 @@ import logging
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.dispatcher.filters import Command
+from aiogram.dispatcher import FSMContext
+from aiogram.contrib.middlewares.logging import LoggingMiddleware
+from aiogram.contrib.fsm_storage.memory import MemoryStorage
+from aiogram.dispatcher.filters.state import State, StatesGroup
 import os
 import threading
 
@@ -17,56 +21,69 @@ def load_questions():
 questions = load_questions()
 
 # Инициализация бота и диспетчера
-API_TOKEN = "6847241186:AAHVKq9G3nDnWIyjg9uMiZPEU4WMnZMXhFA"
+API_TOKEN = "YOUR_API_TOKEN"
 bot = Bot(token=API_TOKEN)
-dp = Dispatcher(bot)
+storage = MemoryStorage()
+dp = Dispatcher(bot, storage=storage)
+dp.middleware.setup(LoggingMiddleware())
 
 # Синхронизация доступа к файлу результатов
 results_lock = threading.Lock()
 
+# Класс для хранения состояния квиза
+class QuizStates(StatesGroup):
+    question = State()
+    score = State()
+
 # Команда /start
 @dp.message_handler(Command("start"))
-async def start(message: types.Message):
-    message.conf['current_question'] = 0
-    message.conf['score'] = 0
-    await ask_question(message)
+async def start(message: types.Message, state: FSMContext):
+    await state.update_data(current_question=0, score=0)
+    await ask_question(message, state)
 
 # Задание вопроса
-async def ask_question(message: types.Message):
-    question_data = questions[message.conf['current_question']]
+async def ask_question(message: types.Message, state: FSMContext):
+    user_data = await state.get_data()
+    current_question_index = user_data['current_question']
+    question_data = questions[current_question_index]
     question_text = question_data['question']
     options = question_data['options']
 
     keyboard = [[InlineKeyboardButton(option, callback_data=option)] for option in options]
     reply_markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
 
-    await message.reply(question_text, reply_markup=reply_markup)
+    await message.answer(question_text, reply_markup=reply_markup)
+    await QuizStates.question.set()
 
 # Обработка нажатия на кнопку
-@dp.callback_query_handler(lambda c: True)
-async def button(callback_query: types.CallbackQuery):
+@dp.callback_query_handler(lambda c: True, state=QuizStates.question)
+async def button(callback_query: types.CallbackQuery, state: FSMContext):
     await bot.answer_callback_query(callback_query.id)
 
     selected_option = callback_query.data
-    current_question_index = callback_query.message.conf.get('current_question', 0)
+    user_data = await state.get_data()
+    current_question_index = user_data['current_question']
     correct_answer = questions[current_question_index]['answer']
 
     if selected_option == correct_answer:
         response_text = f"Правильно! Ответ: {correct_answer}"
-        callback_query.message.conf['score'] = callback_query.message.conf.get('score', 0) + 1
+        new_score = user_data['score'] + 1
+        await state.update_data(score=new_score)
     else:
         response_text = f"Неправильно. Правильный ответ: {correct_answer}"
 
     await bot.edit_message_text(text=response_text, chat_id=callback_query.message.chat.id, message_id=callback_query.message.message_id)
 
-    callback_query.message.conf['current_question'] = current_question_index + 1
-    if callback_query.message.conf['current_question'] < len(questions):
-        await ask_question(callback_query.message)
+    if current_question_index + 1 < len(questions):
+        await state.update_data(current_question=current_question_index + 1)
+        await ask_question(callback_query.message, state)
     else:
         user_id = str(callback_query.from_user.id)
-        results[user_id] = callback_query.message.conf['score']
+        user_score = user_data['score']
+        results[user_id] = user_score
         save_results(results)
-        await bot.send_message(callback_query.message.chat.id, f"Квиз завершен! Ваш результат: {results[user_id]}/{len(questions)}")
+        await bot.send_message(callback_query.message.chat.id, f"Квиз завершен! Ваш результат: {user_score}/{len(questions)}")
+        await state.finish()
 
 # Загрузка результатов из JSON файла
 def load_results():
@@ -75,10 +92,8 @@ def load_results():
             try:
                 return json.load(file)
             except json.decoder.JSONDecodeError:
-                # Если файл пустой или содержит некорректные данные, возвращаем пустой словарь
                 return {}
     else:
-        # Создаем пустой файл results.json, если он не существует
         with open("results.json", 'w', encoding='utf-8') as file:
             json.dump({}, file, ensure_ascii=False, indent=4)
         return {}
@@ -101,6 +116,6 @@ async def stats(message: types.Message):
         await message.reply("Вы еще не проходили квиз.")
 
 # Запуск бота
-if __name__ == '__main__':
+if name == '__main__':
     from aiogram import executor
     executor.start_polling(dp, skip_updates=True)
