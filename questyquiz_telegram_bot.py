@@ -6,6 +6,8 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.fsm.state import State, StatesGroup
+from aiogram.utils.callback_data import CallbackData
+from aiogram import Router
 import os
 import threading
 import asyncio
@@ -25,6 +27,7 @@ API_TOKEN = "6847241186:AAHVKq9G3nDnWIyjg9uMiZPEU4WMnZMXhFA"
 bot = Bot(token=API_TOKEN)
 storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
+router = Router()  # Create a separate Router instance
 
 # Синхронизация доступа к файлу результатов
 results_lock = threading.Lock()
@@ -35,7 +38,7 @@ class QuizStates(StatesGroup):
     score = State()
 
 # Команда /start
-@dp.message(Command("start"))
+@router.message(Command("start"))
 async def start(message: types.Message, state: FSMContext):
     await state.set_data({"current_question": 0, "score": 0})
     await ask_question(message, state)
@@ -55,7 +58,7 @@ async def ask_question(message: types.Message, state: FSMContext):
     await state.set_state(QuizStates.question)
 
 # Обработка нажатия на кнопку
-@dp.callback_query(lambda callback_query: True, QuizStates.question)
+@router.callback_query(lambda callback_query: True, QuizStates.question)
 async def button(callback_query: types.CallbackQuery, state: FSMContext):
     await callback_query.answer()
 
@@ -110,7 +113,8 @@ def save_results(results):
 results = load_results()
 
 # Команда /stats
-@dp.message(Command("stats"))
+@router.message(Command("stats"))
+
 async def stats(message: types.Message):
     user_id = str(message.from_user.id)
     if user_id in results:
@@ -120,7 +124,7 @@ async def stats(message: types.Message):
 
 # Запуск бота
 async def main():
-    dp.include_router(dp.router)
+    dp.include_router(router)  # Include the router with registered handlers
     await bot.start_polling(dp)
 
 if __name__ == '__main__':
