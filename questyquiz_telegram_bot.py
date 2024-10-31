@@ -40,18 +40,18 @@ async def button(callback_query: types.CallbackQuery):
     await bot.answer_callback_query(callback_query.id)
 
     selected_option = callback_query.data
-    current_question_index = callback_query.message.conf['current_question']
+    current_question_index = callback_query.message.conf.get('current_question', 0)
     correct_answer = questions[current_question_index]['answer']
 
     if selected_option == correct_answer:
         response_text = f"Правильно! Ответ: {correct_answer}"
-        callback_query.message.conf['score'] += 1
+        callback_query.message.conf['score'] = callback_query.message.conf.get('score', 0) + 1
     else:
         response_text = f"Неправильно. Правильный ответ: {correct_answer}"
 
     await bot.edit_message_text(text=response_text, chat_id=callback_query.message.chat.id, message_id=callback_query.message.message_id)
 
-    callback_query.message.conf['current_question'] += 1
+    callback_query.message.conf['current_question'] = current_question_index + 1
     if callback_query.message.conf['current_question'] < len(questions):
         await ask_question(callback_query.message)
     else:
@@ -64,8 +64,16 @@ async def button(callback_query: types.CallbackQuery):
 def load_results():
     if os.path.exists("results.json"):
         with open("results.json", 'r', encoding='utf-8') as file:
-            return json.load(file)
-    return {}
+            try:
+                return json.load(file)
+            except json.decoder.JSONDecodeError:
+                # Если файл пустой или содержит некорректные данные, возвращаем пустой словарь
+                return {}
+    else:
+        # Создаем пустой файл results.json, если он не существует
+        with open("results.json", 'w', encoding='utf-8') as file:
+            json.dump({}, file, ensure_ascii=False, indent=4)
+        return {}
 
 # Сохранение результатов в JSON файл
 def save_results(results):
