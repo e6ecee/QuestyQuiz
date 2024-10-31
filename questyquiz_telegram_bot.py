@@ -1,13 +1,7 @@
 import json
 import logging
-from aiogram import Bot, Dispatcher, types
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-from aiogram.filters import Command
-from aiogram.fsm.context import FSMContext
-from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.fsm.state import State, StatesGroup
-from aiogram.utils.callback_data import CallbackData
-from aiogram import Router
+from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 import os
 import threading
 import asyncio
@@ -22,74 +16,68 @@ def load_questions():
 
 questions = load_questions()
 
-# Инициализация бота и диспетчера
+# Инициализация бота и приложения
 API_TOKEN = "6847241186:AAHVKq9G3nDnWIyjg9uMiZPEU4WMnZMXhFA"
 bot = Bot(token=API_TOKEN)
-storage = MemoryStorage()
-dp = Dispatcher(storage=storage)
-router = Router()  # Create a separate Router instance
+app = Application.builder().token(API_TOKEN).build()
 
 # Синхронизация доступа к файлу результатов
 results_lock = threading.Lock()
 
-# Класс для хранения состояния квиза
-class QuizStates(StatesGroup):
-    question = State()
-    score = State()
+# Глобальный словарь для хранения состояний
+user_states = {}
 
 # Команда /start
-@router.message(Command("start"))
-async def start(message: types.Message, state: FSMContext):
-    await state.set_data({"current_question": 0, "score": 0})
-    await ask_question(message, state)
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    user_states[user_id] = {"current_question": 0, "score": 0}
+    await ask_question(update, context)
 
 # Задание вопроса
-async def ask_question(message: types.Message, state: FSMContext):
-    user_data = await state.get_data()
+async def ask_question(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    user_data = user_states[user_id]
     current_question_index = user_data['current_question']
     question_data = questions[current_question_index]
     question_text = question_data['question']
     options = question_data['options']
 
     keyboard = [[InlineKeyboardButton(text=option, callback_data=option)] for option in options]
-    reply_markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
+    reply_markup = InlineKeyboardMarkup(keyboard)
 
-    await message.answer(question_text, reply_markup=reply_markup)
-    await state.set_state(QuizStates.question)
+    if update.callback_query:
+        await update.callback_query.message.edit_text(question_text, reply_markup=reply_markup)
+    else:
+        await update.message.reply_text(question_text, reply_markup=reply_markup)
 
 # Обработка нажатия на кнопку
-@router.callback_query(lambda callback_query: True, QuizStates.question)
-async def button(callback_query: types.CallbackQuery, state: FSMContext):
-    await callback_query.answer()
+async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
 
-    selected_option = callback_query.data
-    user_data = await state.get_data()
+    selected_option = query.data
+    user_id = update.effective_user.id
+    user_data = user_states[user_id]
     current_question_index = user_data['current_question']
     correct_answer = questions[current_question_index]['answer']
 
     if selected_option == correct_answer:
         response_text = f"Правильно! Ответ: {correct_answer}"
-        new_score = user_data['score'] + 1
-        await state.update_data(score=new_score)
+        user_data['score'] += 1
     else:
         response_text = f"Неправильно. Правильный ответ: {correct_answer}"
 
-    await bot.edit_message_text(
-        text=response_text,
-        chat_id=callback_query.message.chat.id,
-        message_id=callback_query.message.message_id
-    )
+    await query.edit_message_text(response_text)
 
     if current_question_index + 1 < len(questions):
-        await state.update_data(current_question=current_question_index + 1)
-        await ask_question(callback_query.message, state)
+        user_states[user_id]['current_question'] += 1
+        await ask_question(update, context)
     else:
-        user_id = str(callback_query.from_user.id)
         user_score = user_data['score']
-        results[user_id] = user_score
+        results[str(user_id)] = user_score
         save_results(results)
-        await bot.send_message(callback_query.message.chat.id, f"Квиз завершен! Ваш результат: {user_score}/{len(questions)}")
-        await state.clear()
+        await query.message.reply_text(f"Квиз завершен! Ваш результат: {user_score}/{len(questions)}")
+        del user_states[user_id]
 
 # Загрузка результатов из JSON файла
 def load_results():
@@ -113,19 +101,22 @@ def save_results(results):
 results = load_results()
 
 # Команда /stats
-@router.message(Command("stats"))
-
-async def stats(message: types.Message):
-    user_id = str(message.from_user.id)
+async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = str(update.effective_user.id)
     if user_id in results:
-        await message.reply(f"Ваш последний результат: {results[user_id]}/{len(questions)}")
+        await update.message.reply_text(f"Ваш последний результат: {results[user_id]}/{len(questions)}")
     else:
-        await message.reply("Вы еще не проходили квиз.")
+        await update.message.reply_text("Вы еще не проходили квиз.")
 
 # Запуск бота
-async def main():
-    dp.include_router(router)  # Include the router with registered handlers
-    await bot.start_polling(dp)
+def main():
+    # Регистрация обработчиков команд
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("stats", stats))
+    app.add_handler(CallbackQueryHandler(button))
+
+    # Запуск бота
+    app.run_polling()
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    main()
