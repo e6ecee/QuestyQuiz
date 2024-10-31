@@ -1,10 +1,9 @@
 import json
 import logging
-from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 import os
 import threading
-import asyncio
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
@@ -18,14 +17,30 @@ questions = load_questions()
 
 # Инициализация бота и приложения
 API_TOKEN = "6847241186:AAHVKq9G3nDnWIyjg9uMiZPEU4WMnZMXhFA"
-bot = Bot(token=API_TOKEN)
-app = Application.builder().token(API_TOKEN).build()
-
-# Синхронизация доступа к файлу результатов
 results_lock = threading.Lock()
-
-# Глобальный словарь для хранения состояний
 user_states = {}
+results = {}
+
+# Загрузка результатов из JSON файла
+def load_results():
+    if os.path.exists("results.json"):
+        with open("results.json", 'r', encoding='utf-8') as file:
+            try:
+                return json.load(file)
+            except json.decoder.JSONDecodeError:
+                return {}
+    else:
+        with open("results.json", 'w', encoding='utf-8') as file:
+            json.dump({}, file, ensure_ascii=False, indent=4)
+        return {}
+
+# Сохранение результатов в JSON файл с синхронизацией
+def save_results(results):
+    with results_lock:
+        with open("results.json", 'w', encoding='utf-8') as file:
+            json.dump(results, file, ensure_ascii=False, indent=4)
+
+results = load_results()
 
 # Команда /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -79,27 +94,6 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.message.reply_text(f"Квиз завершен! Ваш результат: {user_score}/{len(questions)}")
         del user_states[user_id]
 
-# Загрузка результатов из JSON файла
-def load_results():
-    if os.path.exists("results.json"):
-        with open("results.json", 'r', encoding='utf-8') as file:
-            try:
-                return json.load(file)
-            except json.decoder.JSONDecodeError:
-                return {}
-    else:
-        with open("results.json", 'w', encoding='utf-8') as file:
-            json.dump({}, file, ensure_ascii=False, indent=4)
-        return {}
-
-# Сохранение результатов в JSON файл с синхронизацией
-def save_results(results):
-    with results_lock:
-        with open("results.json", 'w', encoding='utf-8') as file:
-            json.dump(results, file, ensure_ascii=False, indent=4)
-
-results = load_results()
-
 # Команда /stats
 async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
@@ -110,6 +104,8 @@ async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Запуск бота
 def main():
+    app = ApplicationBuilder().token(API_TOKEN).build()
+
     # Регистрация обработчиков команд
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("stats", stats))
