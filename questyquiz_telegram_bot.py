@@ -6,7 +6,7 @@ import os
 
 # Загрузка вопросов из JSON файла
 def load_questions():
-    with open("C://Users//YERO//Documents//Python projects//questions.json", 'r', encoding='utf-8') as file:
+    with open("questions.json", 'r', encoding='utf-8') as file:
         return json.load(file)
 
 questions = load_questions()
